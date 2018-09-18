@@ -70,6 +70,7 @@ class NeuralNetwork(object):
         self.W2 = np.random.randn(self.nn_hidden_dim, self.nn_output_dim) / np.sqrt(self.nn_hidden_dim)
         self.b2 = np.zeros((1, self.nn_output_dim))
 
+
     def actFun(self, z, type):
         '''
         actFun computes the activation functions
@@ -124,17 +125,14 @@ class NeuralNetwork(object):
         '''
 
         # YOU IMPLEMENT YOUR feedforward HERE
-        self.z1 = np.dot(X, self.W1) + self.b1
+        self.z1 = np.matmul(X,self.W1) + self.b1
         self.a1 = actFun(self.z1)
-        self.z2 = np.dot(self.a1, self.W2) + self.b2
+        self.z2 = np.matmul(self.a1,self.W2) + self.b2
+
         exp_scores = np.exp(self.z2)
         self.probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
 
-        for i in self.probs.flatten():
-            if np.isnan(i):
-                print(exp_scores)
-
-        return None
+        return self.probs
 
     def calculate_loss(self, X, y):
         '''
@@ -144,16 +142,23 @@ class NeuralNetwork(object):
         :return: the loss for prediction
         '''
         num_examples = len(X)
-        self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
+        probs = self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
         # Calculating the loss
 
         # YOU IMPLEMENT YOUR CALCULATION OF THE LOSS HERE
         y_encoding = np.zeros([num_examples, self.nn_input_dim])
         y_encoding[range(num_examples), y] += 1
-        data_loss = -1.0 * np.sum((y_encoding * np.log(self.probs)).flatten())
+        print(y_encoding.shape, probs.shape, np.log(self.probs).shape)
+        data_loss = -1.0*y_encoding.flatten().dot(np.log(probs.flatten()))
+        #data_loss = -1.0 * np.sum(y_encoding.dot(np.log(self.probs)).flatten()) / num_examples
+
+        #data_loss = -np.log(self.probs[range(num_examples), y_encoding])
+        #data_loss = np.sum(data_loss)/ num_examples
+        #print(y_encoding.shape, self.probs.shape, np.log(self.probs).shape)
+        #print(np.dot(y_encoding, np.log(self.probs)))
 
         # Add regulatization term to loss (optional)
-        data_loss += self.reg_lambda / 2 * (np.sum(np.square(self.W1)) + np.sum(np.square(self.W2)))
+        #data_loss += self.reg_lambda / 2 * (np.sum(np.square(self.W1)) + np.sum(np.square(self.W2)))
         return (1. / num_examples) * data_loss
 
     def predict(self, X):
@@ -179,11 +184,25 @@ class NeuralNetwork(object):
         delta3 = self.probs
         delta3[range(num_examples), y] -= 1
 
-        dW2 = np.dot(np.transpose(self.a1), delta3)
-        db2 = delta3
+        #print("delta3 dim : ", delta3.shape)
+        #dW2 = np.matmul(np.transpose(self.a1), delta3)
+        dW2 = np.dot(self.a1.T, delta3)
+        db2 = np.sum(delta3, axis=0, keepdims=True)
+        #print("dW2, db2 : ", dW2.shape, db2.shape)
 
-        db1 = self.diff_actFun(np.dot(delta3, np.transpose(self.W2)), self.actFun_type)
-        dW1 = np.dot(np.transpose(X), db1)
+        dhidden = np.dot(delta3, self.W2.T)
+        dhidden = self.diff_actFun(dhidden, self.actFun_type)
+        dW1 = np.dot(X.T, dhidden)
+        db1 = np.sum(dhidden, axis=0, keepdims=True)
+        """
+        db1_temp = np.matmul(delta3, self.W2.T)
+        db1_temp = np.matmul(db1_temp, self.diff_actFun(self.z1, self.actFun_type).T)
+        #db1 = self.diff_actFun(np.dot(delta3, np.transpose(self.W2)), self.actFun_type)
+        db1 = np.matmul(db1_temp,dzdb)
+        dW1 = np.matmul(db1_temp, np.transpose(X))
+        """
+        #print(dW1.shape, db1.shape)
+
 
         return dW1, dW2, db1, db2
 
@@ -209,10 +228,9 @@ class NeuralNetwork(object):
 
             # Gradient descent parameter update
             self.W1 += -epsilon * dW1
-            self.b1 = self.b1 + (-epsilon * db1)
-            #self.b1 += -epsilon * db1
+            self.b1 += -epsilon * db1
             self.W2 += -epsilon * dW2
-            self.b2 = self.b2 + (-epsilon * db2)
+            self.b2 += -epsilon * db2
 
             # Optionally print the loss.
             # This is expensive because it uses the whole dataset, so we don't want to do it too often.
@@ -233,10 +251,11 @@ class NeuralNetwork(object):
 def main():
     # generate and visualize Make-Moons dataset
     X, y = generate_data()
+    print(X.shape, y.shape)
     #plt.scatter(X[:, 0], X[:, 1], s=40, c=y, cmap=plt.cm.Spectral)
     #plt.show()
 
-    model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='relu')
+    model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='tanh')
     model.fit_model(X,y)
     model.visualize_decision_boundary(X,y)
 
