@@ -48,7 +48,7 @@ class NeuralNetwork(object):
     This class builds and trains a neural network
     """
 
-    def __init__(self, nn_input_dim, nn_hidden_dim, nn_output_dim, actFun_type='tanh', reg_lambda=0.01, seed=0):
+    def __init__(self, nn_input_dim, nn_hidden_dim, nn_output_dim, actFun_type='tanh', reg_lambda=0.01, seed=2):
         '''
         :param nn_input_dim: input dimension
         :param nn_hidden_dim: the number of hidden units
@@ -70,6 +70,8 @@ class NeuralNetwork(object):
         self.W2 = np.random.randn(self.nn_hidden_dim, self.nn_output_dim) / np.sqrt(self.nn_hidden_dim)
         self.b2 = np.zeros((1, self.nn_output_dim))
 
+    def sigmoid(self, x):
+        return 1 / (1 + np.exp(-x))
 
     def actFun(self, z, type):
         '''
@@ -82,9 +84,10 @@ class NeuralNetwork(object):
         # YOU IMPLMENT YOUR actFun HERE
         if type == 'tanh':
             #activations = (1. - np.exp(-2.0*z)) / (1. + np.exp(-2.0*z))
-            activations = 1 - (np.tanh(z)) ** 2
+            activations = np.tanh(z)
         elif type == 'sigmoid':
-            activations = 1.0 / (1.0 + np.exp(-z))
+            #activations = 1.0 / (1.0 + np.exp(-z))
+            activations = self.sigmoid(z)
         elif type == 'relu':
             activations = np.maximum(0,z)
         else:
@@ -103,12 +106,15 @@ class NeuralNetwork(object):
 
         # YOU IMPLEMENT YOUR diff_actFun HERE
         if type == 'tanh':
+            #d_activations = 1 - (np.tanh(z)) ** 2
             d_activations = (4*np.exp(-2*z)) / ((1 + np.exp(-2*z)) ** 2)
         elif type == 'sigmoid':
-            d_activations = np.exp(-z) / ((1 + np.exp(-z)) ** 2)
+            #d_activations = np.exp(-z) / ((1 + np.exp(-z)) ** 2)
+            d_activations = self.sigmoid(z) * (1 - self.sigmoid(z))
         elif type == 'relu':
-            d_activations = np.maximum(0,z)
-            d_activations[d_activations > 0] = 1
+            d_activations = z
+            d_activations[d_activations > 1] = 1
+            d_activations[d_activations <= 0] = 0
         else:
             print("ERROR : The activation function ", type, " is not available")
             sys.exit()
@@ -125,14 +131,14 @@ class NeuralNetwork(object):
         '''
 
         # YOU IMPLEMENT YOUR feedforward HERE
-        self.z1 = np.matmul(X,self.W1) + self.b1
+        self.z1 = np.dot(X, self.W1) + self.b1
         self.a1 = actFun(self.z1)
-        self.z2 = np.matmul(self.a1,self.W2) + self.b2
+        self.z2 = np.dot(self.a1, self.W2) + self.b2
 
         exp_scores = np.exp(self.z2)
         self.probs = exp_scores / np.sum(exp_scores, axis=1, keepdims=True)
 
-        return self.probs
+        return None
 
     def calculate_loss(self, X, y):
         '''
@@ -142,23 +148,17 @@ class NeuralNetwork(object):
         :return: the loss for prediction
         '''
         num_examples = len(X)
-        probs = self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
+        self.feedforward(X, lambda x: self.actFun(x, type=self.actFun_type))
         # Calculating the loss
 
         # YOU IMPLEMENT YOUR CALCULATION OF THE LOSS HERE
         y_encoding = np.zeros([num_examples, self.nn_input_dim])
         y_encoding[range(num_examples), y] += 1
-        print(y_encoding.shape, probs.shape, np.log(self.probs).shape)
-        data_loss = -1.0*y_encoding.flatten().dot(np.log(probs.flatten()))
-        #data_loss = -1.0 * np.sum(y_encoding.dot(np.log(self.probs)).flatten()) / num_examples
 
-        #data_loss = -np.log(self.probs[range(num_examples), y_encoding])
-        #data_loss = np.sum(data_loss)/ num_examples
-        #print(y_encoding.shape, self.probs.shape, np.log(self.probs).shape)
-        #print(np.dot(y_encoding, np.log(self.probs)))
+        data_loss = -np.sum((np.log(self.probs) * y_encoding).flatten())
 
         # Add regulatization term to loss (optional)
-        #data_loss += self.reg_lambda / 2 * (np.sum(np.square(self.W1)) + np.sum(np.square(self.W2)))
+        data_loss += self.reg_lambda / 2 * (np.sum(np.square(self.W1)) + np.sum(np.square(self.W2)))
         return (1. / num_examples) * data_loss
 
     def predict(self, X):
@@ -184,29 +184,18 @@ class NeuralNetwork(object):
         delta3 = self.probs
         delta3[range(num_examples), y] -= 1
 
-        #print("delta3 dim : ", delta3.shape)
-        #dW2 = np.matmul(np.transpose(self.a1), delta3)
         dW2 = np.dot(self.a1.T, delta3)
         db2 = np.sum(delta3, axis=0, keepdims=True)
-        #print("dW2, db2 : ", dW2.shape, db2.shape)
 
         dhidden = np.dot(delta3, self.W2.T)
-        dhidden = self.diff_actFun(dhidden, self.actFun_type)
+        dhidden = dhidden * self.diff_actFun(self.a1, self.actFun_type)
+
         dW1 = np.dot(X.T, dhidden)
         db1 = np.sum(dhidden, axis=0, keepdims=True)
-        """
-        db1_temp = np.matmul(delta3, self.W2.T)
-        db1_temp = np.matmul(db1_temp, self.diff_actFun(self.z1, self.actFun_type).T)
-        #db1 = self.diff_actFun(np.dot(delta3, np.transpose(self.W2)), self.actFun_type)
-        db1 = np.matmul(db1_temp,dzdb)
-        dW1 = np.matmul(db1_temp, np.transpose(X))
-        """
-        #print(dW1.shape, db1.shape)
-
 
         return dW1, dW2, db1, db2
 
-    def fit_model(self, X, y, epsilon=0.01, num_passes=20000, print_loss=True):
+    def fit_model(self, X, y, epsilon=0.0005, num_passes=20000, print_loss=True):
         '''
         fit_model uses backpropagation to train the network
         :param X: input data
@@ -255,7 +244,7 @@ def main():
     #plt.scatter(X[:, 0], X[:, 1], s=40, c=y, cmap=plt.cm.Spectral)
     #plt.show()
 
-    model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='tanh')
+    model = NeuralNetwork(nn_input_dim=2, nn_hidden_dim=3, nn_output_dim=2, actFun_type='sigmoid')
     model.fit_model(X,y)
     model.visualize_decision_boundary(X,y)
 
