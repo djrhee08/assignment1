@@ -1,0 +1,4 @@
+results/*
+MNIST_data/*
+.idea/*
+__pycache__*
