@@ -2,6 +2,7 @@ __author__ = 'tan_nguyen'
 
 import os
 import time
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 # Load MNIST dataset
 from tensorflow.examples.tutorials.mnist import input_data
@@ -11,19 +12,17 @@ mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 import tensorflow as tf
 sess = tf.InteractiveSession()
 
-
-
 def variable_summaries(var):
     mean = tf.reduce_mean(var)
     stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
 
-    tf.summary.scalar(name=var.op.name+'_min', tensor=tf.reduce_min(var))
-    tf.summary.scalar(name=var.op.name+'_max', tensor=tf.reduce_max(var))
-    tf.summary.scalar(name=var.op.name+'_mean', tensor=mean)
-    tf.summary.scalar(name=var.op.name+'_stddev', tensor=stddev)
-    tf.summary.histogram(name=var.op.name+'_histogram', values=var)
+    tf.summary.scalar(name=var.op.name + '_min', tensor=tf.reduce_min(var))
+    tf.summary.scalar(name=var.op.name + '_max', tensor=tf.reduce_max(var))
+    tf.summary.scalar(name=var.op.name + '_mean', tensor=mean)
+    tf.summary.scalar(name=var.op.name + '_stddev', tensor=stddev)
+    tf.summary.histogram(name=var.op.name + '_histogram', values=var)
 
-def weight_variable(shape):
+def weight_variable(shape, name):
     '''
     Initialize weights
     :param shape: shape of weights, e.g. [w, h ,Cin, Cout] where
@@ -35,12 +34,11 @@ def weight_variable(shape):
     '''
 
     # IMPLEMENT YOUR WEIGHT_VARIABLE HERE
-    initial = tf.truncated_normal(shape, stddev=0.1)
-    W = tf.Variable(initial)
+    W = tf.get_variable(name=name, shape=shape, initializer=tf.random_normal_initializer(mean=0.0, stddev=0.1))
 
     return W
 
-def bias_variable(shape):
+def bias_variable(shape, name):
     '''
     Initialize biases
     :param shape: shape of biases, e.g. [Cout] where
@@ -49,8 +47,10 @@ def bias_variable(shape):
     '''
 
     # IMPLEMENT YOUR BIAS_VARIABLE HERE
-    initial = tf.constant(0.1, shape=shape)
-    b = tf.Variable(initial)
+    #initial = tf.constant(0.1, shape=shape)
+    #b = tf.Variable(initial)
+
+    b = tf.get_variable(name=name, shape=shape, initializer=tf.constant_initializer(0.1))
 
     return b
 
@@ -75,7 +75,7 @@ def conv2d(x, W):
 
     return h_conv
 
-def max_pool_2x2(x):
+def max_pool_2x2(x, name):
     '''
     Perform non-overlapping 2-D maxpooling on 2x2 regions in the input data
     :param x: input data
@@ -83,7 +83,7 @@ def max_pool_2x2(x):
     '''
 
     # IMPLEMENT YOUR MAX_POOL_2X2 HERE
-    h_max = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME') # Always 2-2 (kernel size, strides) maxpool
+    h_max = tf.nn.max_pool(x, ksize=[1,2,2,1], strides=[1,2,2,1], padding='SAME', name=name) # Always 2-2 (kernel size, strides) maxpool
 
     return h_max
 
@@ -107,60 +107,58 @@ def main():
 
     # first convolutional layer
     with tf.name_scope('conv1'):
-        W_conv1 = weight_variable([5,5,1,32])
+        W_conv1 = weight_variable([5,5,1,32], name='W_conv1')
         variable_summaries(W_conv1)
-        b_conv1 = bias_variable([32])
+        b_conv1 = bias_variable([32], name='b_conv1')
         variable_summaries(b_conv1)
-        h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+        h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1, name='h_conv1')
         variable_summaries(h_conv1)
 
     # first pooling layer
     with tf.name_scope('pool1'):
-        h_pool1 = max_pool_2x2(h_conv1)
+        h_pool1 = max_pool_2x2(h_conv1, name='h_pool1')
         variable_summaries(h_pool1)
 
     # second convolutional layer
     with tf.name_scope('conv2'):
-        W_conv2 = weight_variable([5,5,32,64])
+        W_conv2 = weight_variable([5,5,32,64], name='W_conv2')
         variable_summaries(W_conv2)
-        b_conv2 = bias_variable([64])
+        b_conv2 = bias_variable([64], name='b_conv2')
         variable_summaries(b_conv2)
-        h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+        h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2, name='h_conv2')
         variable_summaries(h_conv2)
 
     # second pooling layer
     with tf.name_scope('pool2'):
-        h_pool2 = max_pool_2x2(h_conv2)
+        h_pool2 = max_pool_2x2(h_conv2, name='h_pool2')
         variable_summaries(h_pool2)
 
     # first fully connected layer
     with tf.name_scope('fc1'):
-        W_fc1 = weight_variable([7*7*64,1024])
+        W_fc1 = weight_variable([7*7*64,1024], name='W_fc1')
         variable_summaries(W_fc1)
-        b_fc1 = bias_variable([1024])
+        b_fc1 = bias_variable([1024], name='b_fc1')
         variable_summaries(b_fc1)
         h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
-        h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+        h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1, name='h_fc1')
         variable_summaries(h_fc1)
 
     # dropout
     with tf.name_scope('dropout'):
         keep_prob = tf.placeholder(tf.float32)
         h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
-        variable_summaries(h_fc1_drop)
 
     # second fully connected layer
     with tf.name_scope('fc2'):
-        W_fc2 = weight_variable([1024, 10])
+        W_fc2 = weight_variable([1024, 10], name='W_fc2')
         variable_summaries(W_fc2)
-        b_fc2 = bias_variable([10])
+        b_fc2 = bias_variable([10], name='b_fc2')
         variable_summaries(b_fc2)
         h_fc2 = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
-        variable_summaries(h_fc2)
 
     # softmax
     with tf.name_scope('softmax'):
-        y_conv = tf.nn.softmax(h_fc2)
+        y_conv = tf.nn.softmax(h_fc2, name='y_conv')
         variable_summaries(y_conv)
 
     # FILL IN THE FOLLOWING CODE TO SET UP THE TRAINING
@@ -208,6 +206,7 @@ def main():
             checkpoint_file = os.path.join(result_dir, 'checkpoint')
             saver.save(sess, checkpoint_file, global_step=i)
 
+            """
             summary_str = sess.run(summary_op, feed_dict={x: mnist.validation.images, y_: mnist.validation.labels, keep_prob: 1.0})
             summary_writer.add_summary(summary_str, i)
             summary_writer.flush()
@@ -215,6 +214,7 @@ def main():
             summary_str = sess.run(summary_op, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
             summary_writer.add_summary(summary_str, i)
             summary_writer.flush()
+            """
 
         train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5}) # run one train_step
 
