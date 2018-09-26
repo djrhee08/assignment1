@@ -11,15 +11,17 @@ mnist = input_data.read_data_sets('MNIST_data', one_hot=True)
 import tensorflow as tf
 sess = tf.InteractiveSession()
 
-def variable_summaries(var):
-        mean = tf.reduce_mean(var)
-        stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
 
-        tf.summary.scalar('min', tf.reduce_min(var))
-        tf.summary.scalar('max', tf.reduce_max(var))
-        tf.summary.scalar('mean', mean)
-        tf.summary.scalar('stddev', stddev)
-        tf.summary.histogram('histogram', var)
+
+def variable_summaries(var):
+    mean = tf.reduce_mean(var)
+    stddev = tf.sqrt(tf.reduce_mean(tf.square(var - mean)))
+
+    tf.summary.scalar(name=var.op.name+'_min', tensor=tf.reduce_min(var))
+    tf.summary.scalar(name=var.op.name+'_max', tensor=tf.reduce_max(var))
+    tf.summary.scalar(name=var.op.name+'_mean', tensor=mean)
+    tf.summary.scalar(name=var.op.name+'_stddev', tensor=stddev)
+    tf.summary.histogram(name=var.op.name+'_histogram', values=var)
 
 def weight_variable(shape):
     '''
@@ -95,72 +97,87 @@ def main():
     # FILL IN THE CODE BELOW TO BUILD YOUR NETWORK
 
     # placeholders for input data and input labeles
-    x = tf.placeholder(tf.float32, [None, 784], name='x')
+    x = tf.placeholder(tf.float32, [None, 28*28], name='x')
     y_ = tf.placeholder(tf.float32, [None, 10], name='y_')
 
     # reshape the input image
-    x_image = tf.reshape(x, [-1, 28, 28, 1])
-    variable_summaries(x_image)
+    with tf.name_scope('input'):
+        x_image = tf.reshape(x, [-1, 28, 28, 1])
+        variable_summaries(x_image)
 
     # first convolutional layer
-    W_conv1 = weight_variable([5,5,1,32])
-    variable_summaries(W_conv1)
-    b_conv1 = bias_variable([32])
-    variable_summaries(b_conv1)
-    h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
-    variable_summaries(h_conv1)
-    h_pool1 = max_pool_2x2(h_conv1)
-    variable_summaries(h_pool1)
+    with tf.name_scope('conv1'):
+        W_conv1 = weight_variable([5,5,1,32])
+        variable_summaries(W_conv1)
+        b_conv1 = bias_variable([32])
+        variable_summaries(b_conv1)
+        h_conv1 = tf.nn.relu(conv2d(x_image, W_conv1) + b_conv1)
+        variable_summaries(h_conv1)
+
+    # first pooling layer
+    with tf.name_scope('pool1'):
+        h_pool1 = max_pool_2x2(h_conv1)
+        variable_summaries(h_pool1)
 
     # second convolutional layer
-    W_conv2 = weight_variable([5,5,32,64])
-    variable_summaries(W_conv2)
-    b_conv2 = bias_variable([64])
-    variable_summaries(b_conv2)
-    h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
-    variable_summaries(h_conv2)
-    h_pool2 = max_pool_2x2(h_conv2)
-    variable_summaries(h_pool2)
+    with tf.name_scope('conv2'):
+        W_conv2 = weight_variable([5,5,32,64])
+        variable_summaries(W_conv2)
+        b_conv2 = bias_variable([64])
+        variable_summaries(b_conv2)
+        h_conv2 = tf.nn.relu(conv2d(h_pool1, W_conv2) + b_conv2)
+        variable_summaries(h_conv2)
 
-    # densely connected layer
-    W_fc1 = weight_variable([7*7*64,1024])
-    variable_summaries(W_fc1)
-    b_fc1 = bias_variable([1024])
-    variable_summaries(b_fc1)
-    h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
-    h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
-    variable_summaries(h_fc1)
-    #h_fc1 = tf.nn.relu(tf.contrib.layers.fully_connected(input=h_pool2_flat, num_outputs=1024, ))
+    # second pooling layer
+    with tf.name_scope('pool2'):
+        h_pool2 = max_pool_2x2(h_conv2)
+        variable_summaries(h_pool2)
+
+    # first fully connected layer
+    with tf.name_scope('fc1'):
+        W_fc1 = weight_variable([7*7*64,1024])
+        variable_summaries(W_fc1)
+        b_fc1 = bias_variable([1024])
+        variable_summaries(b_fc1)
+        h_pool2_flat = tf.reshape(h_pool2, [-1, 7*7*64])
+        h_fc1 = tf.nn.relu(tf.matmul(h_pool2_flat, W_fc1) + b_fc1)
+        variable_summaries(h_fc1)
 
     # dropout
-    keep_prob = tf.placeholder(tf.float32)
-    h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+    with tf.name_scope('dropout'):
+        keep_prob = tf.placeholder(tf.float32)
+        h_fc1_drop = tf.nn.dropout(h_fc1, keep_prob)
+        variable_summaries(h_fc1_drop)
+
+    # second fully connected layer
+    with tf.name_scope('fc2'):
+        W_fc2 = weight_variable([1024, 10])
+        variable_summaries(W_fc2)
+        b_fc2 = bias_variable([10])
+        variable_summaries(b_fc2)
+        h_fc2 = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+        variable_summaries(h_fc2)
 
     # softmax
-    W_fc2 = weight_variable([1024, 10])
-    variable_summaries(W_fc2)
-    b_fc2 = bias_variable([10])
-    variable_summaries(b_fc2)
-    y_conv = tf.nn.softmax(tf.matmul(h_fc1_drop, W_fc2) + b_fc2)
-    variable_summaries(y_conv)
-    #y_conv = tf.nn.softmax(h_fc1_drop, name='y_conv')
+    with tf.name_scope('softmax'):
+        y_conv = tf.nn.softmax(h_fc2)
+        variable_summaries(y_conv)
 
     # FILL IN THE FOLLOWING CODE TO SET UP THE TRAINING
 
     # setup training
-    cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_*tf.log(y_conv), reduction_indices=[1]))
+    cross_entropy = tf.reduce_mean(-tf.reduce_sum(y_*tf.log(y_conv), reduction_indices=[1]), name='cross_entropy')
     train_step = tf.train.AdamOptimizer(1e-4).minimize(cross_entropy)
     correct_prediction = tf.equal(tf.argmax(y_conv,1), tf.argmax(y_,1))
     accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
     # Add a scalar summary for the snapshot loss.
-    tf.summary.scalar(cross_entropy.op.name, cross_entropy)
+    tf.summary.scalar(name=cross_entropy.op.name, tensor=cross_entropy)
     # Build the summary operation based on the TF collection of Summaries.
     summary_op = tf.summary.merge_all()
 
     # Add the variable initializer Op.
     init = tf.global_variables_initializer()
-    #initialize_all_variables()
 
     # Create a saver for writing training checkpoints.
     saver = tf.train.Saver()
@@ -172,14 +189,12 @@ def main():
     sess.run(init)
 
     # run the training
-    max_step = 1100
     for i in range(max_step):
         batch = mnist.train.next_batch(50) # make the data batch, which is used in the training iteration.
                                             # the batch size is 50
         if i%100 == 0:
             # output the training accuracy every 100 iterations
-            train_accuracy = accuracy.eval(feed_dict={
-                x:batch[0], y_:batch[1], keep_prob: 1.0})
+            train_accuracy = accuracy.eval(feed_dict={x:batch[0], y_:batch[1], keep_prob: 1.0})
             print("step %d, training accuracy %g"%(i, train_accuracy))
 
             # Update the events file which is used to monitor the training (in this case,
@@ -193,16 +208,18 @@ def main():
             checkpoint_file = os.path.join(result_dir, 'checkpoint')
             saver.save(sess, checkpoint_file, global_step=i)
 
-            #test_accuracy = accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+            summary_str = sess.run(summary_op, feed_dict={x: mnist.validation.images, y_: mnist.validation.labels, keep_prob: 1.0})
             summary_writer.add_summary(summary_str, i)
             summary_writer.flush()
+
             summary_str = sess.run(summary_op, feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0})
+            summary_writer.add_summary(summary_str, i)
+            summary_writer.flush()
 
         train_step.run(feed_dict={x: batch[0], y_: batch[1], keep_prob: 0.5}) # run one train_step
 
     # print test error
-    print("test accuracy %g"%accuracy.eval(feed_dict={
-        x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
+    print("test accuracy %g"%accuracy.eval(feed_dict={x: mnist.test.images, y_: mnist.test.labels, keep_prob: 1.0}))
 
     stop_time = time.time()
     print('The training takes %f second to finish'%(stop_time - start_time))
